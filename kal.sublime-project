@@ -1,0 +1,29 @@
+{
+	"folders":
+	[
+  {
+   "follow_symlinks": true,
+   "path": ".",
+   "file_exclude_patterns":
+   [
+   "*.d",
+   "*.so",
+   "*.bak",
+   "*.root",
+   "*.pdf",
+   "*.tgz",
+   "macros/bak",
+   "macros/tex",
+   "UtilFns.h",
+   "StyleDefs.h",
+   "*MatrixUtils.h"
+   ],
+
+   "folder_exclude_patterns": 
+   [
+   "rootfiles",
+   "pdfs"
+   ]
+ }
+ ]
+}
