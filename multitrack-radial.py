@@ -19,33 +19,17 @@ def add_sim_point(tracked_points, h, w):
     v = 5
     dx = np.random.choice([-1, 1])*np.random.uniform(w/50, w/10)
     dy = np.random.uniform(-h/20, h/4)
-    # dy = np.random.uniform(-h/20, h/10)
+
     x0 = w/2 + dx
     y0 = h/2 + dy
     theta = np.arctan2(dy, dx)
     vx0 = v*np.cos(theta)
     vy0 = v*np.sin(theta)
 
-    # vx0 = np.random.choice([-1, 1])*np.random.uniform(3, 8)
-    # vy0 = np.random.uniform(-1, 8)
-
-    # x0 = w/2 + np.sign(vx0)*np.random.uniform(50, 100)
-    # y0 = h/2 + np.sign(vy0)*np.random.uniform(50, 100)
-
     tp = TrackedPoint(x0, y0, vx0, vy0)
     tp.boundary.xmin, tp.boundary.ymin = 0, 0
     tp.boundary.xmax, tp.boundary.ymax = w-1, h-1
     tracked_points.append(tp)
-
-# def add_sim_point(tracked_points, h, w):
-#     x0 = 0
-#     y0 = np.random.uniform(50, h - 50)
-#     vx0 = np.random.uniform(3, 8)
-#     vy0 = np.random.uniform(-1, 1)
-#     tp = TrackedPoint(x0, y0, vx0, vy0)
-#     tp.boundary.xmin, tp.boundary.ymin = 0, 0
-#     tp.boundary.xmax, tp.boundary.ymax = w-1, h-1
-#     tracked_points.append(tp)
 
 
 def add_noise(x, y, xsigma, ysigma):
@@ -156,6 +140,9 @@ def main():
         draw(frame, frame_index, sim_points, obs_points)
 
         cv2.imshow('Simulation', frame)
+
+        if frame_index < 200:
+            cv2.imwrite('imgs/{:03d}.png'.format(frame_index), frame)
 
         k = cv2.waitKey(30) & 0xFF
         if k in [27, 113]:  # esc, q
