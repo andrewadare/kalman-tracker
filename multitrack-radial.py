@@ -66,7 +66,7 @@ def draw(img, counter, sim_points, obs_points):
                     break
                 next_vertex = p.kf_tail[j+1]
                 cv2.line(img, vertex, next_vertex, (255, 255, 255), 2)
-            cv2.circle(img, p.obs_tail[-1], 4, (255, 255, 255), -1, 8)
+            cv2.circle(img, p.kf_tail[-1], 4, (255, 255, 255), -1, 8)
 
     return img
 
