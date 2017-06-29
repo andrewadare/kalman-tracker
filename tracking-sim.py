@@ -22,7 +22,12 @@ def add_tracked_point(tracked_points, x, y, bounds, max_n_coasts=3):
     tp.boundary.xmin, tp.boundary.ymin = xmin, ymin
     tp.boundary.xmax, tp.boundary.ymax = xmax, ymax
     tp.max_n_coasts = max_n_coasts
+    tp.id = add_tracked_point.id
+    add_tracked_point.id += 1
     tracked_points.append(tp)
+
+
+add_tracked_point.id = 0
 
 
 def draw_tracks(img, tracked_points):
@@ -115,17 +120,25 @@ def match_tracks_to_observations(tracked_objects, observations, bounds,
     # Advance each tracker to the nearest available measurement.
     # If no nearby measurement is found in this frame, coast.
     for track in tracked_objects:
-        if len(observations) > 0:
-            nearest_observation, distance = track.nearest_observation(observations)
-            if distance < distance_threshold:
-                track.step_to(nearest_observation)
-                observations.remove(nearest_observation)
-                track.n_coasts = 0
-            else:
-                track.coast()
+        nearest_observation, distance = track.nearest_observation(observations)
+        print(track.id, 'nearest =', nearest_observation, distance)
+        if distance < distance_threshold:
+            track.step_to(nearest_observation)
+            observations.remove(nearest_observation)
+            track.n_coasts = 0
+        else:
+            track.coast()
+            print(track.id, 'coast', track.n_coasts)
+
+    # debug
+    for t in tracked_objects:
+        if not t.is_valid():
+            print(t.id, 'out')
 
     # Filter out lost/out-of-bounds tracks
     tracked_objects[:] = [d for d in tracked_objects if d.is_valid()]
+
+    print(len(observations), 'leftover observations')
 
     # Start tracking any remaining measurements under the assumption
     # that they are new (not yet tracked).
@@ -146,9 +159,10 @@ def step(sim_points):
     return sim_points
 
 
-def observe(sim_points, observations, xsigma, ysigma, miss_prob=0.0):
+def observe(sim_points, observations, xsigma, ysigma, miss_prob=0.1):
     for p in sim_points:
         if np.random.uniform() > 1.0 - miss_prob:
+            print('miss')
             continue
         meas_x, meas_y = add_noise(p.x, p.y, xsigma, ysigma)
         if p.boundary.contains(meas_x, meas_y):
@@ -156,7 +170,7 @@ def observe(sim_points, observations, xsigma, ysigma, miss_prob=0.0):
 
 
 def main():
-    n_points = 10
+    n_points = 2
     h, w = 800, 600
     bounds = (0, 0, w, h)
     im = np.zeros((h, w, 3), np.uint8)
@@ -168,7 +182,10 @@ def main():
 
     cv2.namedWindow('Simulation')
 
+    loop_index = 0
     while True:
+        print('step', loop_index)
+
         sim_points = step(sim_points)
 
         while len(sim_points) < n_points:
@@ -182,8 +199,8 @@ def main():
         tracked_objects = [t for t in tracked_objects if t.is_valid()]
 
         # Set delay to 0 to step on keypress. Press ESC or q to quit.
-        visualize(im, sim_points, tracked_objects, delay=50)
-
+        visualize(im, sim_points, tracked_objects, delay=0)
+        loop_index += 1
 
 if __name__ == '__main__':
     main()

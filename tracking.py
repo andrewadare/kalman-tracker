@@ -16,6 +16,7 @@ class Bounds2D:
 
 class TrackedPoint:
     def __init__(self, x, y, vx, vy):
+        self.id = 0
         self.x = x                   # Observed position
         self.y = y
         self.kx = x                  # Kalman position
@@ -99,10 +100,8 @@ class TrackedPoint:
 
     def coast(self):
         self.kf.predict()
-        # self.kf.correct(measurement)
 
         self.kx, self.ky = self.kf.statePre
-        self.x, self.y = self.kf.statePre
 
         self.kf_tail.append((self.kx, self.ky))
 
