@@ -1,7 +1,11 @@
-import cv2
-import numpy as np
+import sys
 from collections import deque
 
+import numpy as np
+from numpy.linalg import norm
+from filterpy.kalman import KalmanFilter
+from scipy.linalg import block_diag
+from filterpy.common import Q_discrete_white_noise
 
 class Bounds2D:
     def __init__(self, xmin, ymin, xmax, ymax):
@@ -14,47 +18,72 @@ class Bounds2D:
         return (self.xmin <= x < self.xmax and self.ymin <= y < self.ymax)
 
 
+def first_order_2d_kalman_filter(initial_state, Q_std, R_std):
+    """
+    Parameters
+    ----------
+    initial_state : sequence of floats
+        [x0, vx0, y0, vy0]
+    Q_std : float
+        Standard deviation to use for process noise covariance matrix
+    R_std : float
+        Standard deviation to use for measurement noise covariance matrix
+
+    Returns
+    -------
+    kf : filterpy.kalman.KalmanFilter instance
+    """
+    kf = KalmanFilter(dim_x=4, dim_z=2)
+    dt = 1.0   # time step
+
+    # state mean (x, vx, y, vy) and covariance
+    kf.x = np.array([initial_state]).T
+    kf.P = np.eye(4) * 500.
+
+    # no control inputs
+    kf.u = 0.
+
+    # state transition matrix
+    kf.F = np.array([[1, dt, 0, 0],
+                     [0, 1, 0, 0],
+                     [0, 0, 1, dt],
+                     [0, 0, 0, 1]])
+
+    # measurement matrix - maps from state space to observation space
+    kf.H = np.array([[1, 0, 0, 0],
+                     [0, 0, 1, 0]])
+
+    # measurement noise covariance
+    kf.R = np.eye(2) * R_std**2
+
+    # process noise covariance
+    q = Q_discrete_white_noise(dim=2, dt=dt, var=Q_std**2)
+    kf.Q = block_diag(q, q)
+
+    return kf
+
+
 class TrackedPoint:
-    def __init__(self, x, y, vx, vy):
+    def __init__(self, x, y, vx, vy, sigma_Q, sigma_R):
         self.id = 0
-        self.x = x                   # Observed position
+        self.x = x                      # Observed position
         self.y = y
-        self.kx = x                  # Kalman position
-        self.ky = y
-        self.vx = vx                   # Step velocity dx/dt (= step size).
+        self.vx = vx                    # Step velocity
         self.vy = vy
-        self.kvx = vx                  # Kalman velocity
-        self.kvy = vy
-        self.v = 0.0                    # Historical speed
+        # self.v = 0.0                    # Historical speed
         self.boundary = Bounds2D(0, 0, 1000, 1000)
         self.lifetime = 0
         self.n_tail_points = 50
-        # Number of frames this point "lost the lock" and coasted.
         self.n_coasts = 0
         self.max_n_coasts = 20
         self.coast_length = 0.           # Coast distance so far
-        self.max_coast_length = 1000.     # Allowable coast distance
-        # 2 state pars, 2 measurement inputs (both x,y)
-        self.kf = cv2.KalmanFilter(2, 2)
-
-        proc_var = 1e-4
-        meas_var = 1e-3
-        err_var = 1e-1
-
-        self.kf.transitionMatrix = np.eye(2, dtype=np.float32)
-        self.kf.measurementMatrix = np.eye(2, dtype=np.float32)
-        self.kf.processNoiseCov = proc_var*np.eye(2, dtype=np.float32)
-        self.kf.measurementNoiseCov = meas_var*np.eye(2, dtype=np.float32)
-        self.kf.errorCovPost = err_var*np.eye(2, dtype=np.float32)
-
-        self.kf.statePre[0] = self.x
-        self.kf.statePre[1] = self.y
-
+        self.max_coast_length = 1000.    # Allowable coast distance
+        self.kf = first_order_2d_kalman_filter([x, vx, y, vy], sigma_Q, sigma_R)
         self.obs_tail = deque()
         self.kf_tail = deque()
 
     def step_to(self, point):
-        """
+        """Advance tracker to the observed point.
         point: (x,y) or np.array((x,y))
         """
         self.lifetime += 1
@@ -62,37 +91,19 @@ class TrackedPoint:
         x, y = point
         self.x, self.y = point
 
-        self.obs_tail.append((int(x), int(y)))
+        self.obs_tail.append((x, y))
 
         if len(self.obs_tail) > self.n_tail_points:
             self.obs_tail.popleft()
 
-        # Compute historical velocity of this point as the track
-        # length divided by # steps
-        # if len(self.obs_tail) > 0:
-        # tail = np.array(self.obs_tail, dtype=np.int64)
-        tail = np.array(self.obs_tail, int)
-
-        self.v = cv2.arcLength(tail, False) / len(tail)
-
         if not self.boundary.contains(x, y):
             return
         else:
-            measurement = np.array([[x], [y]], dtype=np.float32)
+            z = np.array([[x], [y]], dtype=np.float32)
             self.kf.predict()
-            self.kf.correct(measurement)
+            self.kf.update(z)
 
-            self.kx, self.ky = self.kf.statePost
-
-            self.kf_tail.append((self.kx, self.ky))
-
-            N = len(self.kf_tail)
-            if N > self.n_tail_points:
-                self.kf_tail.popleft()
-            if N > 2:
-                tail_x, tail_y = self.kf_tail[N-3]
-                self.kvx = (self.kx - tail_x)/2
-                self.kvy = (self.ky - tail_y)/2
+        self.update_tail()
 
     def stay(self, point):
         here = (self.x, self.y)
@@ -101,37 +112,43 @@ class TrackedPoint:
     def coast(self):
         self.kf.predict()
 
-        self.kx, self.ky = self.kf.statePre
+        self.update_tail()
 
-        self.kf_tail.append((self.kx, self.ky))
+        next = np.array((self.kx() + self.kvx(), self.ky() + self.kvy()))
 
-        N = len(self.kf_tail)
-        if N > self.n_tail_points:
-            self.kf_tail.popleft()
-        if N > 2:
-            tail_x, tail_y = self.kf_tail[N-3]
-            self.kvx = (self.kx - tail_x)/2
-            self.kvy = (self.ky - tail_y)/2
-
-        next = np.array((self.x + self.kvx, self.y + self.kvy))
-
-        self.coast_length += cv2.norm(next - np.array((self.x, self.y)))
-        # self.step_to(next)
+        self.coast_length += norm(next - np.array((self.x, self.y)))
         self.n_coasts += 1
         self.lifetime += 1
 
     def nearest_observation(self, candidates):
         nearest = np.array((-1, -1))
-        here = np.array((self.x, self.y))
+        here = np.array((self.kx(), self.ky()))
         min_dist = np.inf
 
         # TODO vectorize
         for i, point in enumerate(candidates):
-            dist = cv2.norm(np.array(point) - here)
+            dist = norm(np.array(point) - here)
             if dist < min_dist:
                 min_dist = dist
                 nearest = point
         return nearest, min_dist
+
+    def update_tail(self):
+        self.kf_tail.append((self.kx(), self.ky()))
+        if len(self.kf_tail) > self.n_tail_points:
+            self.kf_tail.popleft()
+
+    def kx(self):
+        return self.kf.x[0, 0]
+
+    def kvx(self):
+        return self.kf.x[1, 0]
+
+    def ky(self):
+        return self.kf.x[2, 0]
+
+    def kvy(self):
+        return self.kf.x[3, 0]
 
     def in_bounds(self):
         return self.boundary.contains(self.x, self.y)

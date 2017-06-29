@@ -4,7 +4,8 @@ import numpy as np
 from tracking import TrackedPoint
 
 
-def add_tracked_point(tracked_points, x, y, bounds, max_n_coasts=3):
+def add_tracked_point(tracked_points, x, y, bounds,
+                      sigma_proc, sigma_meas, max_n_coasts=3):
     """
     Parameters
     ----------
@@ -18,7 +19,7 @@ def add_tracked_point(tracked_points, x, y, bounds, max_n_coasts=3):
         Maximum number of frames to drift without a measurement
     """
     xmin, ymin, xmax, ymax = bounds
-    tp = TrackedPoint(x, y, 0, 0)
+    tp = TrackedPoint(x, y, 0, 0, sigma_proc, sigma_meas)
     tp.boundary.xmin, tp.boundary.ymin = xmin, ymin
     tp.boundary.xmax, tp.boundary.ymax = xmax, ymax
     tp.max_n_coasts = max_n_coasts
@@ -44,18 +45,21 @@ def draw_tracks(img, tracked_points):
         for j, vertex in enumerate(p.obs_tail):
             if j > len(p.obs_tail) - 2:
                 break
-            next_vertex = p.obs_tail[j+1]
+            vertex = tuple([int(x) for x in vertex])
+            next_vertex = tuple([int(x) for x in p.obs_tail[j+1]])
             cv2.line(img, vertex, next_vertex, blue, 2)
         if len(p.obs_tail) > 0:
-            cv2.circle(img, p.obs_tail[-1], 4, blue, -1, 4)
+            x, y = p.obs_tail[-1]
+            cv2.circle(img, (int(x), int(y)), 4, blue, -1, 4)
 
         # Tracked positions
         for j, vertex in enumerate(p.kf_tail):
-            if j > len(p.obs_tail) - 2:
+            if j > len(p.kf_tail) - 2:
                 break
-            next_vertex = p.kf_tail[j+1]
+            vertex = tuple([int(x) for x in vertex])
+            next_vertex = tuple([int(x) for x in p.kf_tail[j+1]])
             cv2.line(img, vertex, next_vertex, red, 2)
-        cv2.circle(img, (int(p.kx), int(p.ky)), 3, red, -1, 3)
+        cv2.circle(img, (int(p.kx()), int(p.ky())), 3, red, -1, 3)
     return img
 
 
@@ -71,14 +75,6 @@ def visualize(im, sim_points, tracked_objects, delay=30):
         sys.exit(0)
 
 
-def add_point(tracked_points, x, y, h, w):
-    tp = TrackedPoint(x, y, 0, 0)
-    tp.boundary.xmin, tp.boundary.ymin = 0, 0
-    tp.boundary.xmax, tp.boundary.ymax = w-1, h-1
-    tp.max_coast_length = 0.1*np.sqrt(w*w + h*h)
-    tracked_points.append(tp)
-
-
 def add_sim_point(tracked_points, h, w):
     """
     Add a TrackedPoint instance to the list of simulated ground-truth positions.
@@ -87,7 +83,7 @@ def add_sim_point(tracked_points, h, w):
     """
     x, y = np.random.uniform(0, w), np.random.uniform(0, h/4)
     vx, vy = 0, 5
-    tp = TrackedPoint(x, y, vx, vy)
+    tp = TrackedPoint(x, y, vx, vy, 1., 1.)
     tp.boundary.xmin, tp.boundary.ymin = 0, 0
     tp.boundary.xmax, tp.boundary.ymax = w-1, h-1
     tracked_points.append(tp)
@@ -144,7 +140,7 @@ def match_tracks_to_observations(tracked_objects, observations, bounds,
     # that they are new (not yet tracked).
     for i, observation in enumerate(observations):
         x, y = observation
-        add_tracked_point(tracked_objects, x, y, bounds, max_n_coasts=3)
+        add_tracked_point(tracked_objects, x, y, bounds, 0.01, 0.1, max_n_coasts=3)
 
     # Clear the array of observations for the next time step.
     observations[:] = []
@@ -153,6 +149,7 @@ def match_tracks_to_observations(tracked_objects, observations, bounds,
 def step(sim_points):
     # Advance simulated points. Simulate position measurements.
     for p in sim_points:
+        print((p.x + p.vx, p.y + p.vy))
         p.step_to((p.x + p.vx, p.y + p.vy))
     # Remove out-of-bounds points
     sim_points = [p for p in sim_points if p.in_bounds()]
