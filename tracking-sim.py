@@ -95,10 +95,6 @@ def add_sim_point(tracked_points, h, w):
     tracked_points.append(tp)
 
 
-def add_noise(x, y, xsigma, ysigma):
-    return (x + xsigma*np.random.randn(), y + ysigma*np.random.randn())
-
-
 def match_tracks_to_observations(tracked_objects, observations, bounds,
                                  distance_threshold=30):
     """Associate tracks to observations. The `tracked_objects` and
@@ -123,30 +119,21 @@ def match_tracks_to_observations(tracked_objects, observations, bounds,
     # If no nearby measurement is found in this frame, coast.
     for track in tracked_objects:
         nearest_observation, distance = track.nearest_observation(observations)
-        print(track.id, 'nearest =', nearest_observation, distance)
         if distance < distance_threshold:
             track.step_to(nearest_observation)
             observations.remove(nearest_observation)
             track.n_coasts = 0
         else:
             track.coast()
-            print(track.id, 'coast', track.n_coasts)
-
-    # debug
-    for t in tracked_objects:
-        if not t.is_valid():
-            print(t.id, 'out')
 
     # Filter out lost/out-of-bounds tracks
     tracked_objects[:] = [d for d in tracked_objects if d.is_valid()]
-
-    print(len(observations), 'leftover observations')
 
     # Start tracking any remaining measurements under the assumption
     # that they are new (not yet tracked).
     for i, observation in enumerate(observations):
         x, y = observation
-        add_tracked_point(tracked_objects, x, y, bounds, 1, 10, max_n_coasts=3)
+        add_tracked_point(tracked_objects, x, y, bounds, 0.1, 10, max_n_coasts=3)
         # add_tracked_point(tracked_objects, x, y, bounds, 0.001, 0.1, max_n_coasts=3)
 
     # Clear the array of observations for the next time step.
@@ -154,19 +141,28 @@ def match_tracks_to_observations(tracked_objects, observations, bounds,
 
 
 def step(sim_points):
-    # Advance simulated points. Simulate position measurements.
+    """Advance simulated points and remove any that step out of bounds.
+    The `sim_points` array is modified in place.
+    Parameters
+    ----------
+    sim_points : sequence of TrackedPoint objects
+    """
     for p in sim_points:
-        print((p.x + p.vx, p.y + p.vy))
         p.step_to((p.x + p.vx, p.y + p.vy))
+
     # Remove out-of-bounds points
-    sim_points = [p for p in sim_points if p.in_bounds()]
+    sim_points[:] = [p for p in sim_points if p.in_bounds()]
+
     return sim_points
+
+
+def add_noise(x, y, xsigma, ysigma):
+    return (x + xsigma*np.random.randn(), y + ysigma*np.random.randn())
 
 
 def observe(sim_points, observations, xsigma, ysigma, miss_prob=0.1):
     for p in sim_points:
         if np.random.uniform() > 1.0 - miss_prob:
-            print('miss')
             continue
         meas_x, meas_y = add_noise(p.x, p.y, xsigma, ysigma)
         if p.boundary.contains(meas_x, meas_y):
@@ -188,9 +184,7 @@ def main():
 
     loop_index = 0
     while True:
-        print('step', loop_index)
-
-        sim_points = step(sim_points)
+        step(sim_points)
 
         while len(sim_points) < n_points:
             add_sim_point(sim_points, h, w)
