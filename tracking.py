@@ -2,10 +2,11 @@ import sys
 from collections import deque
 
 import numpy as np
-from numpy.linalg import norm
+from numpy.linalg import norm, eig
 from filterpy.kalman import KalmanFilter
 from scipy.linalg import block_diag
 from filterpy.common import Q_discrete_white_noise
+
 
 class Bounds2D:
     def __init__(self, xmin, ymin, xmax, ymax):
@@ -102,7 +103,6 @@ class TrackedPoint:
             z = np.array([[x], [y]], dtype=np.float32)
             self.kf.predict()
             self.kf.update(z)
-
         self.update_tail()
 
     def stay(self, point):
@@ -111,11 +111,8 @@ class TrackedPoint:
 
     def coast(self):
         self.kf.predict()
-
         self.update_tail()
-
         next = np.array((self.kx() + self.kvx(), self.ky() + self.kvy()))
-
         self.coast_length += norm(next - np.array((self.x, self.y)))
         self.n_coasts += 1
         self.lifetime += 1
@@ -167,3 +164,11 @@ class TrackedPoint:
         if self.coasted_too_far():
             return False
         return True
+
+    def covariance_ellipse(self):
+        P = self.kf.P[::2, ::2]  # x-y covariance matrix
+        l, v = eig(P)
+        a, b = np.sqrt(l)  # semimajor and semiminor axes
+        phi = np.arctan2(v[1], v[0])[0]  # ellipse rotation angle
+        x, y = self.kx(), self.ky()  # center point
+        return x, y, a, b, phi

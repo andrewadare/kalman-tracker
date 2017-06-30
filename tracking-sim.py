@@ -31,7 +31,7 @@ def add_tracked_point(tracked_points, x, y, bounds,
 add_tracked_point.id = 0
 
 
-def draw_tracks(img, tracked_points):
+def draw_tracks(im, tracked_points):
     red = (0, 0, 255)
     yellow = (0, 240, 240)
     blue = (255, 150, 0)
@@ -47,10 +47,10 @@ def draw_tracks(img, tracked_points):
                 break
             vertex = tuple([int(x) for x in vertex])
             next_vertex = tuple([int(x) for x in p.obs_tail[j+1]])
-            cv2.line(img, vertex, next_vertex, blue, 2)
+            cv2.line(im, vertex, next_vertex, blue, 2)
         if len(p.obs_tail) > 0:
             x, y = p.obs_tail[-1]
-            cv2.circle(img, (int(x), int(y)), 4, blue, -1, 4)
+            cv2.circle(im, (int(x), int(y)), 4, blue, -1, 4)
 
         # Tracked positions
         for j, vertex in enumerate(p.kf_tail):
@@ -58,9 +58,15 @@ def draw_tracks(img, tracked_points):
                 break
             vertex = tuple([int(x) for x in vertex])
             next_vertex = tuple([int(x) for x in p.kf_tail[j+1]])
-            cv2.line(img, vertex, next_vertex, red, 2)
-        cv2.circle(img, (int(p.kx()), int(p.ky())), 3, red, -1, 3)
-    return img
+            cv2.line(im, vertex, next_vertex, red, 2)
+        cv2.circle(im, (int(p.kx()), int(p.ky())), 3, red, -1, 3)
+
+        x, y, a, b, phi = p.covariance_ellipse()
+        center = (int(x), int(y))
+        axes = (int(3*a), int(3*b))  # 3 sigma contours
+        angle = int(phi*180/np.pi)
+        cv2.ellipse(im, center, axes, angle, 0, 360, yellow, 2)
+    return im
 
 
 def visualize(im, sim_points, tracked_objects, delay=30):
@@ -94,7 +100,7 @@ def add_noise(x, y, xsigma, ysigma):
 
 
 def match_tracks_to_observations(tracked_objects, observations, bounds,
-                                 distance_threshold=50):
+                                 distance_threshold=30):
     """Associate tracks to observations. The `tracked_objects` and
     `observations` lists are modified in-place.
 
@@ -140,7 +146,8 @@ def match_tracks_to_observations(tracked_objects, observations, bounds,
     # that they are new (not yet tracked).
     for i, observation in enumerate(observations):
         x, y = observation
-        add_tracked_point(tracked_objects, x, y, bounds, 0.01, 0.1, max_n_coasts=3)
+        add_tracked_point(tracked_objects, x, y, bounds, 1, 10, max_n_coasts=3)
+        # add_tracked_point(tracked_objects, x, y, bounds, 0.001, 0.1, max_n_coasts=3)
 
     # Clear the array of observations for the next time step.
     observations[:] = []
@@ -167,7 +174,7 @@ def observe(sim_points, observations, xsigma, ysigma, miss_prob=0.1):
 
 
 def main():
-    n_points = 2
+    n_points = 10
     h, w = 800, 600
     bounds = (0, 0, w, h)
     im = np.zeros((h, w, 3), np.uint8)
