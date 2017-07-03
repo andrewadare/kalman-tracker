@@ -1,34 +1,7 @@
 import sys
 import cv2
 import numpy as np
-from tracking import TrackedPoint
-
-
-def add_tracked_point(tracked_points, x, y, bounds,
-                      sigma_proc, sigma_meas, max_n_coasts=3):
-    """
-    Parameters
-    ----------
-    tracked_points : list(TrackedPoint)
-        Append a new TrackedPoint to this list
-    x, y : float
-        Initial position
-    bounds : sequence of floats
-        (xmin, ymin, xmax, ymax)
-    max_n_coasts :  int
-        Maximum number of frames to drift without a measurement
-    """
-    xmin, ymin, xmax, ymax = bounds
-    tp = TrackedPoint(x, y, 0, 0, sigma_proc, sigma_meas)
-    tp.boundary.xmin, tp.boundary.ymin = xmin, ymin
-    tp.boundary.xmax, tp.boundary.ymax = xmax, ymax
-    tp.max_n_coasts = max_n_coasts
-    tp.id = add_tracked_point.id
-    add_tracked_point.id += 1
-    tracked_points.append(tp)
-
-
-add_tracked_point.id = 0
+from tracking import TrackedPoint, add_tracked_point, match_tracks_to_observations
 
 
 def draw_tracks(im, tracked_points):
@@ -93,51 +66,6 @@ def add_sim_point(tracked_points, h, w):
     tp.boundary.xmin, tp.boundary.ymin = 0, 0
     tp.boundary.xmax, tp.boundary.ymax = w-1, h-1
     tracked_points.append(tp)
-
-
-def match_tracks_to_observations(tracked_objects, observations, bounds,
-                                 distance_threshold=30):
-    """Associate tracks to observations. The `tracked_objects` and
-    `observations` lists are modified in-place.
-
-    Parameters
-    ----------
-    tracked_objects : sequence of TrackedPoint instances
-    observations : sequence of int or float pairs
-        observed (x,y) positions
-    bounds : sequence of floats
-        (xmin, ymin, xmax, ymax)
-    distance_threshold : int
-        Maximum distance to nearest observation for matching
-
-    Returns
-    -------
-    None
-    """
-
-    # Advance each tracker to the nearest available measurement.
-    # If no nearby measurement is found in this frame, coast.
-    for track in tracked_objects:
-        nearest_observation, distance = track.nearest_observation(observations)
-        if distance < distance_threshold:
-            track.step_to(nearest_observation)
-            observations.remove(nearest_observation)
-            track.n_coasts = 0
-        else:
-            track.coast()
-
-    # Filter out lost/out-of-bounds tracks
-    tracked_objects[:] = [d for d in tracked_objects if d.is_valid()]
-
-    # Start tracking any remaining measurements under the assumption
-    # that they are new (not yet tracked).
-    for i, observation in enumerate(observations):
-        x, y = observation
-        add_tracked_point(tracked_objects, x, y, bounds, 0.1, 10, max_n_coasts=3)
-        # add_tracked_point(tracked_objects, x, y, bounds, 0.001, 0.1, max_n_coasts=3)
-
-    # Clear the array of observations for the next time step.
-    observations[:] = []
 
 
 def step(sim_points):

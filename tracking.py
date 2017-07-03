@@ -1,22 +1,9 @@
-import sys
 from collections import deque
-
 import numpy as np
 from numpy.linalg import norm, eig
 from filterpy.kalman import KalmanFilter
 from scipy.linalg import block_diag
 from filterpy.common import Q_discrete_white_noise
-
-
-class Bounds2D:
-    def __init__(self, xmin, ymin, xmax, ymax):
-        self.xmin = xmin
-        self.ymin = ymin
-        self.xmax = xmax
-        self.ymax = ymax
-
-    def contains(self, x, y):
-        return (self.xmin <= x < self.xmax and self.ymin <= y < self.ymax)
 
 
 def first_order_2d_kalman_filter(initial_state, Q_std, R_std):
@@ -64,14 +51,122 @@ def first_order_2d_kalman_filter(initial_state, Q_std, R_std):
     return kf
 
 
+def add_tracked_point(tracked_points, x, y, bounds,
+                      sigma_proc, sigma_meas, max_n_coasts=3):
+    """Append a new TrackedPoint object to the `tracked_points` list.
+
+    Parameters
+    ----------
+    tracked_points : list(TrackedPoint)
+        Append a new TrackedPoint to this list
+    x, y : float
+        Initial position
+    bounds : sequence of floats
+        (xmin, ymin, xmax, ymax)
+    sigma_proc, sigma_meas : float
+        Process and measurement noise sigma parameters (respectively)
+        for new tracks
+    max_n_coasts :  int
+        Maximum number of frames to drift without a measurement
+    """
+    xmin, ymin, xmax, ymax = bounds
+    tp = TrackedPoint(x, y, 0, 0, sigma_proc, sigma_meas)
+    tp.boundary.xmin, tp.boundary.ymin = xmin, ymin
+    tp.boundary.xmax, tp.boundary.ymax = xmax, ymax
+    tp.max_n_coasts = max_n_coasts
+    tp.id = add_tracked_point.id
+    add_tracked_point.id += 1
+    tracked_points.append(tp)
+
+
+add_tracked_point.id = 0
+
+
+def match_tracks_to_observations(tracked_objects,
+                                 observations,
+                                 bounds,
+                                 distance_threshold=30,
+                                 sigma_proc=0.1,
+                                 sigma_meas=10,
+                                 max_n_coasts=3,
+                                 min_lifetime=3):
+    """Associate tracks to observations. The `tracked_objects` and
+    `observations` lists are modified in-place.
+
+    Parameters
+    ----------
+    tracked_objects : sequence of TrackedPoint instances
+    observations : sequence of int or float pairs
+        list of observed (x,y) positions
+    bounds : sequence of floats
+        (xmin, ymin, xmax, ymax)
+    distance_threshold : int
+        Maximum distance to nearest observation for matching
+    sigma_proc, sigma_meas : float, optional
+        Process and measurement noise sigma parameters (respectively)
+        for new tracks
+    max_n_coasts : int, optional, default=3
+        Max number of time steps the track can propagate without an observation
+        (prediction-only) before being removed
+
+    Returns
+    -------
+    finished_tracks : list of TrackedPoints
+        Good tracks that have run their course
+    """
+    finished_tracks = []
+
+    # Advance each tracker to the nearest available measurement.
+    # If no nearby measurement is found in this frame, coast.
+    for track in tracked_objects:
+        nearest_observation, distance = track.nearest_observation(observations)
+        if distance < distance_threshold:
+            track.step_to(nearest_observation)
+            observations.remove(nearest_observation)
+            track.n_coasts = 0
+        else:
+            track.coast()
+
+    # Handle lost or out-of-bounds tracks. If the track is disappearing
+    # after a good run, transfer it to the `finished_tracks` list.
+    for t in tracked_objects:
+        if t.is_valid():
+            pass
+        else:
+            if t.lifetime > min_lifetime and t.n_coasts < t.max_n_coasts:
+                finished_tracks.append(t)
+            tracked_objects.remove(t)
+
+    # Start tracking any remaining measurements under the assumption
+    # that they are new (not yet tracked).
+    for i, observation in enumerate(observations):
+        x, y = observation
+        add_tracked_point(tracked_objects, x, y, bounds,
+                          sigma_proc, sigma_meas, max_n_coasts=max_n_coasts)
+
+    # Clear the array of observations for the next time step.
+    observations[:] = []
+    return finished_tracks
+
+
+class Bounds2D:
+    def __init__(self, xmin, ymin, xmax, ymax):
+        self.xmin = xmin
+        self.ymin = ymin
+        self.xmax = xmax
+        self.ymax = ymax
+
+    def contains(self, x, y):
+        return (self.xmin <= x < self.xmax and self.ymin <= y < self.ymax)
+
+
 class TrackedPoint:
     def __init__(self, x, y, vx, vy, sigma_Q, sigma_R):
         self.id = 0
         self.x = x                      # Observed position
         self.y = y
-        self.vx = vx                    # Step velocity
+        self.vx = vx                    # Observed instantaneous velocity
         self.vy = vy
-        # self.v = 0.0                    # Historical speed
         self.boundary = Bounds2D(0, 0, 1000, 1000)
         self.lifetime = 0
         self.n_tail_points = 50
@@ -166,9 +261,25 @@ class TrackedPoint:
         return True
 
     def covariance_ellipse(self):
+        """Return center position, 1-sigma axes, and orientation of uncertainty
+        ellipse from the x and y components of the state covariance matrix
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        x, y : float
+            center of ellipse
+        a, b : float
+            semimajor and semiminor axis lengths (1 sigma)
+        phi : float
+            angle of semimajor axis w.r.t. the x axis in radians
+        """
         P = self.kf.P[::2, ::2]  # x-y covariance matrix
-        l, v = eig(P)
-        a, b = np.sqrt(l)  # semimajor and semiminor axes
-        phi = np.arctan2(v[1], v[0])[0]  # ellipse rotation angle
+        lambdas, vs = eig(P)
+        a, b = np.sqrt(lambdas)  # semimajor and semiminor axes
+        phi = np.arctan2(vs[1], vs[0])[0]  # ellipse rotation angle
         x, y = self.kx(), self.ky()  # center point
         return x, y, a, b, phi
