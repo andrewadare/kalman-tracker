@@ -1,7 +1,7 @@
 import sys
 import cv2
 import numpy as np
-from tracking import TrackedPoint, add_tracked_point, match_tracks_to_observations
+from tracked_point import TrackedPoint, add_tracked_point, match_tracks_to_observations
 
 
 def draw_tracks(im, tracked_points):

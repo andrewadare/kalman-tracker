@@ -1,12 +1,14 @@
 from collections import deque
 import numpy as np
 from numpy.linalg import norm, eig
+
 from filterpy.kalman import KalmanFilter
-from scipy.linalg import block_diag
 from filterpy.common import Q_discrete_white_noise
 
+from scipy.linalg import block_diag
 
-def first_order_2d_kalman_filter(initial_state, Q_std, R_std):
+
+def point_2d_kalman_filter(initial_state, Q_std, R_std):
     """
     Parameters
     ----------
@@ -26,7 +28,7 @@ def first_order_2d_kalman_filter(initial_state, Q_std, R_std):
 
     # state mean (x, vx, y, vy) and covariance
     kf.x = np.array([initial_state]).T
-    kf.P = np.eye(4) * 500.
+    kf.P = np.eye(kf.dim_x) * 500.
 
     # no control inputs
     kf.u = 0.
@@ -42,7 +44,7 @@ def first_order_2d_kalman_filter(initial_state, Q_std, R_std):
                      [0, 0, 1, 0]])
 
     # measurement noise covariance
-    kf.R = np.eye(2) * R_std**2
+    kf.R = np.eye(kf.dim_z) * R_std**2
 
     # process noise covariance
     q = Q_discrete_white_noise(dim=2, dt=dt, var=Q_std**2)
@@ -149,7 +151,7 @@ def match_tracks_to_observations(tracked_objects,
     return finished_tracks
 
 
-class Bounds2D:
+class Bounds2D(object):
     def __init__(self, xmin, ymin, xmax, ymax):
         self.xmin = xmin
         self.ymin = ymin
@@ -160,7 +162,7 @@ class Bounds2D:
         return (self.xmin <= x < self.xmax and self.ymin <= y < self.ymax)
 
 
-class TrackedPoint:
+class TrackedPoint(object):
     def __init__(self, x, y, vx, vy, sigma_Q, sigma_R):
         self.id = 0
         self.x = x                      # Observed position
@@ -174,7 +176,7 @@ class TrackedPoint:
         self.max_n_coasts = 20
         self.coast_length = 0.           # Coast distance so far
         self.max_coast_length = 1000.    # Allowable coast distance
-        self.kf = first_order_2d_kalman_filter([x, vx, y, vy], sigma_Q, sigma_R)
+        self.kf = point_2d_kalman_filter([x, vx, y, vy], sigma_Q, sigma_R)
         self.obs_tail = deque()
         self.kf_tail = deque()
 
@@ -277,7 +279,7 @@ class TrackedPoint:
         phi : float
             angle of semimajor axis w.r.t. the x axis in radians
         """
-        P = self.kf.P[::2, ::2]  # x-y covariance matrix
+        P = self.kf.P[0:4:2, 0:4:2]  # x-y covariance matrix
         lambdas, vs = eig(P)
         a, b = np.sqrt(lambdas)  # semimajor and semiminor axes
         phi = np.arctan2(vs[1], vs[0])[0]  # ellipse rotation angle
