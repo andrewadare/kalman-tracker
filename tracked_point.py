@@ -53,43 +53,10 @@ def point_2d_kalman_filter(initial_state, Q_std, R_std):
     return kf
 
 
-def add_tracked_point(tracked_points, x, y, bounds,
-                      sigma_proc, sigma_meas, max_n_coasts=3):
-    """Append a new TrackedPoint object to the `tracked_points` list.
-
-    Parameters
-    ----------
-    tracked_points : list(TrackedPoint)
-        Append a new TrackedPoint to this list
-    x, y : float
-        Initial position
-    bounds : sequence of floats
-        (xmin, ymin, xmax, ymax)
-    sigma_proc, sigma_meas : float
-        Process and measurement noise sigma parameters (respectively)
-        for new tracks
-    max_n_coasts :  int
-        Maximum number of frames to drift without a measurement
-    """
-    xmin, ymin, xmax, ymax = bounds
-    tp = TrackedPoint(x, y, 0, 0, sigma_proc, sigma_meas)
-    tp.boundary.xmin, tp.boundary.ymin = xmin, ymin
-    tp.boundary.xmax, tp.boundary.ymax = xmax, ymax
-    tp.max_n_coasts = max_n_coasts
-    tp.id = add_tracked_point.id
-    add_tracked_point.id += 1
-    tracked_points.append(tp)
-
-
-add_tracked_point.id = 0
-
-
 def match_tracks_to_observations(tracked_objects,
                                  observations,
-                                 bounds,
+                                 track_adder,
                                  distance_threshold=30,
-                                 sigma_proc=0.1,
-                                 sigma_meas=10,
                                  max_n_coasts=3,
                                  min_lifetime=3):
     """Associate tracks to observations. The `tracked_objects` and
@@ -97,19 +64,20 @@ def match_tracks_to_observations(tracked_objects,
 
     Parameters
     ----------
-    tracked_objects : sequence of TrackedPoint instances
+    tracked_objects : list
+        list of TrackedPoint instances
     observations : sequence of int or float pairs
         list of observed (x,y) positions
-    bounds : sequence of floats
-        (xmin, ymin, xmax, ymax)
+    track_adder : function
+        Callback that appends to the tracked_objects list
     distance_threshold : int
         Maximum distance to nearest observation for matching
-    sigma_proc, sigma_meas : float, optional
-        Process and measurement noise sigma parameters (respectively)
-        for new tracks
     max_n_coasts : int, optional, default=3
         Max number of time steps the track can propagate without an observation
         (prediction-only) before being removed
+    min_lifetime : int, optional, default=3
+        Minimum number of steps this track has taken to be considered worth
+        saving to the returned array.
 
     Returns
     -------
@@ -141,10 +109,8 @@ def match_tracks_to_observations(tracked_objects,
 
     # Start tracking any remaining measurements under the assumption
     # that they are new (not yet tracked).
-    for i, observation in enumerate(observations):
-        x, y = observation
-        add_tracked_point(tracked_objects, x, y, bounds,
-                          sigma_proc, sigma_meas, max_n_coasts=max_n_coasts)
+    for observation in observations:
+        track_adder(tracked_objects, observation)
 
     # Clear the array of observations for the next time step.
     observations[:] = []

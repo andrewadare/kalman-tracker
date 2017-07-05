@@ -1,7 +1,7 @@
 import sys
 import cv2
 import numpy as np
-from tracked_point import TrackedPoint, add_tracked_point, match_tracks_to_observations
+from tracked_point import TrackedPoint, match_tracks_to_observations
 
 
 def draw_tracks(im, tracked_points):
@@ -107,10 +107,37 @@ def main():
     observations = []  # noisy measurements
     tracked_objects = []  # tracks
     xsigma, ysigma = 0.005*w, 0.005*h
+    sigma_proc = 0.1
+    sigma_meas = 10
+    max_n_coasts = 3
+
+    def add_track(tracked_objects, observation):
+        """Append a new TrackedPoint object to the `tracked_objects` list.
+        This is used as a callback in match_tracks_to_observations and the
+        signature should not change.
+
+        Parameters
+        ----------
+        tracked_objects : list(TrackedPoint)
+            Append a new TrackedPoint to this list
+        observation : sequence of floats
+            (x, y)
+        """
+        x, y = observation
+        tp = TrackedPoint(x, y, 0, 0, sigma_proc, sigma_meas)
+
+        xmin, ymin, xmax, ymax = bounds
+        tp.boundary.xmin, tp.boundary.ymin = xmin, ymin
+        tp.boundary.xmax, tp.boundary.ymax = xmax, ymax
+        tp.max_n_coasts = max_n_coasts
+        tp.id = add_track.id
+        add_track.id += 1
+        tracked_objects.append(tp)
+
+    add_track.id = 0
 
     cv2.namedWindow('Simulation')
 
-    loop_index = 0
     while True:
         step(sim_points)
 
@@ -119,14 +146,14 @@ def main():
 
         observe(sim_points, observations, xsigma, ysigma)
 
-        match_tracks_to_observations(tracked_objects, observations, bounds)
+        match_tracks_to_observations(tracked_objects, observations, add_track)
 
         # Filter out lost/out-of-bounds tracks
         tracked_objects = [t for t in tracked_objects if t.is_valid()]
 
         # Set delay to 0 to step on keypress. Press ESC or q to quit.
         visualize(im, sim_points, tracked_objects, delay=0)
-        loop_index += 1
+
 
 if __name__ == '__main__':
     main()
