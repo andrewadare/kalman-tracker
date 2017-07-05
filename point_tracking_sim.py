@@ -76,7 +76,7 @@ def step(sim_points):
     sim_points : sequence of TrackedPoint objects
     """
     for p in sim_points:
-        p.step_to((p.x + p.vx, p.y + p.vy))
+        p.step((p.x + p.vx, p.y + p.vy))
 
     # Remove out-of-bounds points
     sim_points[:] = [p for p in sim_points if p.in_bounds()]

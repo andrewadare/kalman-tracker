@@ -91,7 +91,7 @@ def match_tracks_to_observations(tracked_objects,
     for track in tracked_objects:
         nearest_observation, distance = track.nearest_observation(observations)
         if distance < distance_threshold:
-            track.step_to(nearest_observation)
+            track.step(nearest_observation)
             observations.remove(nearest_observation)
             track.n_coasts = 0
         else:
@@ -146,14 +146,17 @@ class TrackedPoint(object):
         self.obs_tail = deque()
         self.kf_tail = deque()
 
-    def step_to(self, point):
-        """Advance tracker to the observed point.
-        point: (x,y) or np.array((x,y))
+    def step(self, z):
+        """Advance tracker given observation vector `z`. Do a predict-correct
+        cycle and update internal state. The first two entries of `z` MUST be
+        the 2D position x, y.
+        z: sequence of floats
+            Measurement vector (x, y, ...)
         """
         self.lifetime += 1
 
-        x, y = point
-        self.x, self.y = point
+        x, y = z[0], z[1]
+        self.x, self.y = x, y
 
         self.obs_tail.append((x, y))
 
@@ -163,14 +166,9 @@ class TrackedPoint(object):
         if not self.boundary.contains(x, y):
             return
         else:
-            z = np.array([[x], [y]], dtype=np.float32)
             self.kf.predict()
-            self.kf.update(z)
+            self.kf.update(np.asarray(z).reshape([len(z), 1]))
         self.update_tail()
-
-    def stay(self, point):
-        here = (self.x, self.y)
-        self.step_to(here)
 
     def coast(self):
         self.kf.predict()
@@ -180,14 +178,14 @@ class TrackedPoint(object):
         self.n_coasts += 1
         self.lifetime += 1
 
-    def nearest_observation(self, candidates):
-        nearest = np.array((-1, -1))
+    def nearest_observation(self, z_candidates):
+        nearest = None
         here = np.array((self.kx(), self.ky()))
         min_dist = np.inf
 
         # TODO vectorize
-        for i, point in enumerate(candidates):
-            dist = norm(np.array(point) - here)
+        for i, point in enumerate(z_candidates):
+            dist = norm(np.array(point)[0:2] - here)
             if dist < min_dist:
                 min_dist = dist
                 nearest = point
