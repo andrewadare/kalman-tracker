@@ -59,7 +59,7 @@ def box_kalman_filter(initial_state, Q_std, R_std):
 class TrackedBox(TrackedPoint):
     """Class for tracking a 2D rectangular object (e.g. a bounding box) whose
     state includes position, velocity, width and height. The box is centered
-    on the (x,y) position. Extends TrackedPoint."""
+    on (x,y). Extends TrackedPoint."""
 
     def __init__(self, state, sigma_Q, sigma_R):
         x, vx, y, vy, w, h = state
@@ -68,6 +68,24 @@ class TrackedBox(TrackedPoint):
         # Override the TrackedPoint kalman filter initialization
         self.kf = box_kalman_filter(state, sigma_Q, sigma_R)
 
-        # Box width and height
+        # Observed box width and height
         self.w = w
         self.h = h
+
+    def step(self, z):
+        """See docs for TrackedPoint.step()
+
+        Parameters
+        ----------
+        z : sequence of floats
+            Measurement vector (x, y, w, h)
+        """
+        TrackedPoint.step(self, z)
+        self.w = z[2]
+        self.h = z[3]
+
+    def kw(self):
+        return self.kf.x[4, 0]
+
+    def kh(self):
+        return self.kf.x[5, 0]
