@@ -89,3 +89,27 @@ class TrackedBox(TrackedPoint):
 
     def kh(self):
         return self.kf.x[5, 0]
+
+    def top_left(self):
+        """NOTE: assumes y increases downwards according to image or SVG
+        conventions. Coords are rounded to ints"""
+        return (int(self.x - self.w/2),
+                int(self.y - self.h/2))
+
+    def bottom_right(self):
+        """NOTE: assumes y increases downwards according to image or SVG
+        conventions. Coords are rounded to ints"""
+        return (int(self.x + self.w/2),
+                int(self.y + self.h/2))
+
+    def k_top_left(self):
+        """NOTE: assumes y increases downwards according to image or SVG
+        conventions. Coords are rounded to ints"""
+        return (int(self.kx() - self.kw()/2),
+                int(self.ky() - self.kh()/2))
+
+    def k_bottom_right(self):
+        """NOTE: assumes y increases downwards according to image or SVG
+        conventions. Coords are rounded to ints"""
+        return (int(self.kx() + self.kw()/2),
+                int(self.ky() + self.kh()/2))

@@ -5,14 +5,14 @@ from tracked_point import match_tracks_to_observations
 from tracked_box import TrackedBox
 
 
-def draw_tracks(im, tracked_points):
+def draw_tracks(im, tracked_boxes):
     red = (0, 0, 255)
     yellow = (0, 240, 240)
     blue = (255, 150, 0)
 
     # Draw the past few points as a polyline "tail", with the most
     # recent as a circle.
-    for i, p in enumerate(tracked_points):
+    for i, p in enumerate(tracked_boxes):
         if p.lifetime == 0:
             continue
         # Observed positions
@@ -35,6 +35,10 @@ def draw_tracks(im, tracked_points):
             cv2.line(im, vertex, next_vertex, red, 2)
         cv2.circle(im, (int(p.kx()), int(p.ky())), 3, red, -1, 3)
 
+        # Observed and tracked boxes, respectively
+        cv2.rectangle(im, p.top_left(), p.bottom_right(), blue, 1)
+        cv2.rectangle(im, p.k_top_left(), p.k_bottom_right(), red, 1)
+
         x, y, a, b, phi = p.covariance_ellipse()
         center = (int(x), int(y))
         axes = (int(3*a), int(3*b))  # 3 sigma contours
@@ -55,7 +59,7 @@ def visualize(im, sim_points, tracked_objects, delay=30):
         sys.exit(0)
 
 
-def add_sim_point(tracked_points, h, w, box_size=(10, 10)):
+def add_sim_point(tracked_points, h, w, box_size=(100, 100)):
     """
     Add a TrackedPoint instance to the list of simulated ground-truth positions.
     TrackedPoint instances are used for convenience in keeping state. Tracking
@@ -77,13 +81,21 @@ def step(sim_points):
     ----------
     sim_points : sequence of TrackedPoint objects
     """
+
+    # Made-up perturbations to slowly change box shape/size.
+    fw = 0.8*np.cos(0.05*step.i)
+    fh = 0.4*np.sin(0.01*step.i)
+
     for p in sim_points:
-        p.step((p.x + p.vx, p.y + p.vy, 0, 0))
+        p.step((p.x + p.vx, p.y + p.vy, p.w + fw, p.h + fh))
 
     # Remove out-of-bounds points
     sim_points[:] = [p for p in sim_points if p.in_bounds()]
-
+    step.i += 1
     return sim_points
+
+
+step.i = 0
 
 
 def add_noise(x, y, xsigma, ysigma):
@@ -95,14 +107,14 @@ def observe(sim_points, observations, xsigma, ysigma, miss_prob=0.1):
         if np.random.uniform() > 1.0 - miss_prob:
             continue
         meas_x, meas_y = add_noise(p.x, p.y, xsigma, ysigma)
-        box_w = p.w + np.random.randn()
-        box_h = p.h + np.random.randn()
+        box_w = p.w + 0.1*np.random.randn()
+        box_h = p.h + 0.1*np.random.randn()
         if p.boundary.contains(meas_x, meas_y):
             observations.append((meas_x, meas_y, box_w, box_h))
 
 
 def main():
-    n_points = 10
+    n_points = 5
     h, w = 800, 600
     bounds = (0, 0, w, h)
     im = np.zeros((h, w, 3), np.uint8)
@@ -110,9 +122,9 @@ def main():
     sim_points = []  # simulated true positions
     observations = []  # noisy measurements: box center x,y and w,h
     tracked_objects = []  # tracks
-    xsigma, ysigma = 0.005*w, 0.005*h
-    sigma_proc = 0.1
-    sigma_meas = 10
+    xsigma, ysigma = 0.002*w, 0.002*h
+    sigma_proc = 0.5  # Smaller sigma_Q --> smoother but more sluggish
+    sigma_meas = 5
     max_n_coasts = 3
 
     cv2.namedWindow('Simulation')
