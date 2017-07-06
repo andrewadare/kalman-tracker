@@ -62,7 +62,8 @@ def add_sim_point(tracked_points, h, w):
     """
     x, y = np.random.uniform(0, w), np.random.uniform(0, h/4)
     vx, vy = 0, 5
-    tp = TrackedPoint(x, y, vx, vy, 1., 1.)
+    state_vec = [x, vx, y, vy]
+    tp = TrackedPoint(state_vec, 1., 1.)
     tp.boundary.xmin, tp.boundary.ymin = 0, 0
     tp.boundary.xmax, tp.boundary.ymax = w-1, h-1
     tracked_points.append(tp)
@@ -124,7 +125,8 @@ def main():
             (x, y)
         """
         x, y = observation
-        tp = TrackedPoint(x, y, 0, 0, sigma_proc, sigma_meas)
+        state_vec = [x, 0, y, 0]
+        tp = TrackedPoint(state_vec, sigma_proc, sigma_meas)
 
         xmin, ymin, xmax, ymax = bounds
         tp.boundary.xmin, tp.boundary.ymin = xmin, ymin
