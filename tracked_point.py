@@ -69,7 +69,7 @@ def match_tracks_to_observations(tracked_objects,
     observations : sequence of int or float pairs
         list of observed (x,y) positions
     track_adder : function
-        Callback that appends to the tracked_objects list
+        Callback that appends a track to the tracked_objects list
     distance_threshold : int
         Maximum distance to nearest observation for matching
     max_n_coasts : int, optional, default=3
@@ -129,7 +129,18 @@ class Bounds2D(object):
 
 
 class TrackedPoint(object):
-    def __init__(self, x, y, vx, vy, sigma_Q, sigma_R):
+    def __init__(self, state, sigma_Q, sigma_R):
+        """
+        Parameters
+        ----------
+        state : sequence of floats
+            [x, vx, y, vy]
+        sigma_Q : float
+            Process noise sigma parameter
+        sigma_R : float
+            Measurement noise sigma parameter
+        """
+        x, vx, y, vy = state
         self.id = 0
         self.x = x                      # Observed position
         self.y = y
@@ -150,6 +161,9 @@ class TrackedPoint(object):
         """Advance tracker given observation vector `z`. Do a predict-correct
         cycle and update internal state. The first two entries of `z` MUST be
         the 2D position x, y.
+
+        Parameters
+        ----------
         z: sequence of floats
             Measurement vector (x, y, ...)
         """
