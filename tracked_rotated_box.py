@@ -38,9 +38,10 @@ def rot_box_kalman_filter(initial_state, Q_std, R_std):
     kf.F[0, 1] = kf.F[2, 3] = dt
 
     # measurement matrix - maps from state space to observation space, so
-    # shape is dim_z x dim_x. Set coefficients for x,y,w,h to 1.0.
+    # shape is dim_z x dim_x.
     kf.H = np.zeros([kf.dim_z, kf.dim_x])
 
+    # z = Hx. H has nonzero coefficients for the following components of kf.x:
     #   x            y            w            h           phi
     kf.H[0, 0] = kf.H[1, 2] = kf.H[2, 4] = kf.H[3, 5] = kf.H[4, 6] = 1.0
 

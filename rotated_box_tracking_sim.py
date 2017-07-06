@@ -135,7 +135,7 @@ def observe(sim_points, observations, xsigma, ysigma, miss_prob=0.1):
             observations.append((meas_x, meas_y, box_w, box_h, phi))
 
 
-def main():
+def main(save_imgs=False):
     n_points = 5
     h, w = 800, 600
     bounds = (0, 0, w, h)
@@ -176,6 +176,7 @@ def main():
 
     add_track.id = 0
 
+    frame_index = 0
     while True:
         step(sim_points)
 
@@ -192,5 +193,15 @@ def main():
         # Set delay to 0 to step on keypress. Press ESC or q to quit.
         visualize(im, sim_points, tracked_objects, delay=0)
 
+        if save_imgs and frame_index < 250:
+            name = 'imgs/rbb{:03d}.png'.format(frame_index)
+            cv2.imwrite(name, im)
+            print('saved', name)
+        frame_index += 1
+
+
 if __name__ == '__main__':
-    main()
+    # To save an animated GIF using the ImageMagick convert tool:
+    # convert -delay 30 -loop 0 imgs/rbb*.png tracked_rotated_boxes.gif
+    main(save_imgs=False)
+
